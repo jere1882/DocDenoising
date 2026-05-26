@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "denoising"
+version = "0.1.0"
+description = "UNet for removing JPEG compression artifacts from document images"
+requires-python = ">=3.10"
+dependencies = [
+    "torch",
+    "torchvision",
+    "pytorch-lightning>=2.0",
+    "hydra-core",
+    "omegaconf",
+    "pymupdf",
+    "opencv-python",
+    "numpy",
+    "pillow",
+    "matplotlib",
+    "tqdm",
+    "transformers",
+    "wandb",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[project.scripts]
+denoising-train = "denoising.train:main"
+denoising-predict = "denoising.predict:main"
+denoising-infer = "denoising.infer:main"
+denoising-extract-crops = "denoising.data.extract_crops:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+denoising = ["conf/**/*.yaml"]
+
+[tool.ruff]
+line-length = 100

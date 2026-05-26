@@ -1,0 +1,21 @@
+clean_dir: data/crops/clean
+img_size: 512
+batch_size: 8
+num_workers: 4
+test_fraction: 0.1
+
+# Degradation pipeline — steps applied in order, each with its own prob and parameter range.
+# To override from CLI: data.degradations='[{type: jpeg, prob: 1.0, quality_min: 10, quality_max: 50}]'
+degradations:
+  - type: gaussian_blur
+    prob: 0.3
+    radius_min: 0.1
+    radius_max: 1.0
+  - type: jpeg
+    prob: 1.0
+    quality_min: 10
+    quality_max: 50
+  - type: gaussian_noise
+    prob: 0.5
+    sigma_min: 0.0
+    sigma_max: 0.02

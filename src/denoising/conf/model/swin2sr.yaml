@@ -1,0 +1,14 @@
+backbone: swin2sr
+backbone_cfg:
+  checkpoint: lightweight   # "lightweight" (1M params, fits MPS) or "compressed" (12M, needs more VRAM)
+  embed_dim: 60
+  depths: [6, 6, 6, 6]
+  num_heads: [6, 6, 6, 6]
+  window_size: 8
+  mlp_ratio: 2.0
+  resi_connection: "1conv"
+  pretrained: true
+lr: 2.0e-5
+optimizer: adam
+loss: mse
+# MPS note: run with data.batch_size=1 — transformer activations at 256x256 are large

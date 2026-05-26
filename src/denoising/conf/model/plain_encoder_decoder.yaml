@@ -1,0 +1,8 @@
+backbone: plain_encoder_decoder
+backbone_cfg:
+  in_channels: 3
+  out_channels: 3
+  base_channels: 64
+lr: 1.0e-3
+optimizer: adam
+loss: mse

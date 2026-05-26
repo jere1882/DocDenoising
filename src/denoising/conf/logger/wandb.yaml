@@ -1,0 +1,4 @@
+_target_: pytorch_lightning.loggers.WandbLogger
+project: document-image-denoising
+save_dir: ${log_dir}
+log_model: false

@@ -1,0 +1,7 @@
+checkpoint: outputs/checkpoints/last.ckpt
+num_candidates: 60
+num_samples: 4
+display_scale: 2
+demo_quality: 5
+seed: 123
+output: demo.png

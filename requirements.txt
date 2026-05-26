@@ -1,0 +1,11 @@
+torch
+torchvision
+pytorch-lightning>=2.0
+hydra-core
+omegaconf
+pymupdf
+opencv-python
+numpy
+pillow
+matplotlib
+tqdm

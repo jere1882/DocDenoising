@@ -1,0 +1,5 @@
+checkpoint: outputs/checkpoints/last.ckpt
+input: ???       # required: path to the input image
+output: null     # if null, saves alongside the input as <name>_denoised.<ext>
+tile_size: 256   # must match the model's trained resolution
+overlap: 32      # pixel overlap between adjacent tiles; more = smoother seams, slower

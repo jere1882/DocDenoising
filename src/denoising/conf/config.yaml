@@ -1,0 +1,13 @@
+defaults:
+  - data: default
+  - model: unet
+  - trainer: default
+  - logger: csv
+  - predict: default
+  - infer: default
+  - _self_
+
+seed: 42
+checkpoint_dir: ${hydra:run.dir}/checkpoints
+log_dir: ${hydra:run.dir}/logs
+ckpt_path: null  # set to a .ckpt path to resume training

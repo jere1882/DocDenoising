@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+
+# Data and outputs (do not commit)
+data/crops/
+data/source_pdfs/
+outputs/
+*.ckpt
+*.pth
+
+# Logs
+lightning_logs/
+multirun/
+.hydra/
+outputs/logs/
