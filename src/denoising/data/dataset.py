@@ -3,11 +3,24 @@
 import os
 import random
 
-import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset
 
-from denoising.data.transforms import DegradationPipeline
+from denoising.data.transforms import DegradationPipeline, apply_deterministic
+
+
+def split_names(names, seed: int, test_fraction: float) -> tuple[list[str], list[str]]:
+    """Deterministic train/val filename split.
+
+    Shared by DenoisingDataModule and predict.py so both see the exact same
+    held-out validation set for a given (seed, test_fraction) — predict.py
+    needs this to sample real validation crops instead of the whole pool.
+    """
+    names = sorted(names)
+    rng = random.Random(seed)
+    rng.shuffle(names)
+    n_test = max(1, int(round(len(names) * test_fraction)))
+    return names[n_test:], names[:n_test]  # train, val
 
 
 class DocumentDenoisingDataset(Dataset):
@@ -39,14 +52,7 @@ class DocumentDenoisingDataset(Dataset):
         clean = Image.open(os.path.join(self.clean_dir, name)).convert("RGB")
 
         if self.deterministic:
-            seed = hash(name) & 0xFFFFFFFF
-            py_state = random.getstate()
-            np_state = np.random.get_state()
-            random.seed(seed)
-            np.random.seed(seed)
-            noisy = self.pipeline(clean)
-            random.setstate(py_state)
-            np.random.set_state(np_state)
+            noisy = apply_deterministic(self.pipeline, clean, name)
         else:
             noisy = self.pipeline(clean)
 

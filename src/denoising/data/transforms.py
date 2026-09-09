@@ -96,3 +96,22 @@ class DegradationPipeline:
         for step in self.steps:
             img = step(img)
         return img
+
+
+def apply_deterministic(pipeline: DegradationPipeline, img: Image.Image, name: str) -> Image.Image:
+    """Run pipeline with its RNG seeded by name, restoring prior RNG state afterward.
+
+    Same file always gets the same noise this way — used for the validation set
+    (comparable PSNR across epochs) and predict.py (demo grid matches what the
+    model was actually validated against).
+    """
+    seed = hash(name) & 0xFFFFFFFF
+    py_state = random.getstate()
+    np_state = np.random.get_state()
+    random.seed(seed)
+    np.random.seed(seed)
+    try:
+        return pipeline(img)
+    finally:
+        random.setstate(py_state)
+        np.random.set_state(np_state)

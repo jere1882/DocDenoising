@@ -1,4 +1,6 @@
-"""Generate the demo grid: noisy / denoised / clean for top-N samples by PSNR gain."""
+"""Generate the demo grid: noisy / denoised / clean for top-N samples by PSNR gain,
+sampled from the held-out validation split using the real degradation pipeline —
+i.e. the same crops and same noise the checkpoint was actually validated against."""
 
 import random
 from pathlib import Path
@@ -6,10 +8,11 @@ from pathlib import Path
 import hydra
 import torch
 import torchvision.transforms as T
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from PIL import Image, ImageDraw, ImageFont
 
-from denoising.data.transforms import jpeg_roundtrip
+from denoising.data.dataset import split_names
+from denoising.data.transforms import DegradationPipeline, apply_deterministic
 from denoising.models.lit_module import DenoisingLitModule
 from denoising.utils.device import pick_device
 from denoising.utils.metrics import psnr_tensor
@@ -59,19 +62,27 @@ def main(cfg: DictConfig) -> None:
     transform = T.Compose([T.Resize((cfg.data.img_size, cfg.data.img_size)), T.ToTensor()])
 
     clean_dir = Path(cfg.data.clean_dir)
-    all_clean = sorted(
-        (p for p in clean_dir.iterdir() if p.suffix == ".png"),
+    all_names = [p.name for p in clean_dir.iterdir() if p.suffix == ".png"]
+    _, val_names = split_names(all_names, cfg.seed, cfg.data.test_fraction)
+    print(f"{len(val_names)} crops in the held-out validation split (of {len(all_names)} total)")
+
+    val_paths = sorted(
+        (clean_dir / n for n in val_names),
         key=lambda p: p.stat().st_size,
         reverse=True,
     )
-    pool = all_clean[: max(cfg.predict.num_candidates * 4, 100)]
+    pool = val_paths[: max(cfg.predict.num_candidates * 4, 100)]
     rng.shuffle(pool)
     candidates = pool[: cfg.predict.num_candidates]
+
+    pipeline = DegradationPipeline.from_config(OmegaConf.to_container(cfg.data.degradations, resolve=True))
 
     results = []
     for clean_path in candidates:
         clean_pil = Image.open(clean_path).convert("RGB")
-        noisy_pil = jpeg_roundtrip(clean_pil, cfg.predict.demo_quality)
+        # Same deterministic-by-filename seeding the val dataloader uses, so this
+        # is the exact noisy image that checkpoint was scored against.
+        noisy_pil = apply_deterministic(pipeline, clean_pil, clean_path.name)
 
         n = transform(noisy_pil).unsqueeze(0).to(device)
         c = transform(clean_pil).unsqueeze(0).to(device)

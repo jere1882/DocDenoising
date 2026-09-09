@@ -1,13 +1,12 @@
 """LightningDataModule for the document denoising dataset."""
 
 import os
-import random
 
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
-from denoising.data.dataset import DocumentDenoisingDataset
+from denoising.data.dataset import DocumentDenoisingDataset, split_names
 from denoising.data.transforms import DegradationPipeline
 
 
@@ -26,12 +25,8 @@ class DenoisingDataModule(pl.LightningDataModule):
         self.save_hyperparameters()
 
     def setup(self, stage: str | None = None) -> None:
-        names = sorted(f for f in os.listdir(self.hparams.clean_dir) if f.endswith(".png"))
-        rng = random.Random(self.hparams.seed)
-        rng.shuffle(names)
-        n_test = max(1, int(round(len(names) * self.hparams.test_fraction)))
-        test_names = names[:n_test]
-        train_names = names[n_test:]
+        names = [f for f in os.listdir(self.hparams.clean_dir) if f.endswith(".png")]
+        train_names, test_names = split_names(names, self.hparams.seed, self.hparams.test_fraction)
 
         pipeline = DegradationPipeline.from_config(self.hparams.degradations)
 

@@ -137,10 +137,10 @@ Each W&B run logs:
 ### Step 4 — Generate demo samples
 
 ```bash
-denoising-predict predict.checkpoint=outputs/my_run/checkpoints/last.ckpt predict.num_samples=4 predict.demo_quality=5
+denoising-predict predict.checkpoint=outputs/my_run/checkpoints/last.ckpt predict.num_samples=4
 ```
 
-Picks the top-N crops by PSNR gain and stacks them into `demo.png`.
+Samples candidates from the held-out validation split (never crops the model trained on), degrades them with the real `data.degradations` pipeline — the same noisy input the checkpoint was actually validated against — picks the top-N by PSNR gain, and stacks them into `demo.png`.
 
 ### Step 5 — Denoise a full document image
 
