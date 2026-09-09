@@ -16,10 +16,14 @@ class LogPredictionsCallback(pl.Callback):
         self._batch: tuple | None = None
 
     def on_validation_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0):
+        if not trainer.is_global_zero:
+            return
         if batch_idx == 0:
             self._batch = batch
 
     def on_validation_epoch_end(self, trainer, pl_module) -> None:
+        if not trainer.is_global_zero:
+            return
         if self._batch is None:
             return
         if not isinstance(trainer.logger, WandbLogger):
