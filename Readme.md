@@ -18,7 +18,8 @@ The pipeline:
 ```
 .
 ├── data/crops/clean/                  # generated dataset (gitignored)
-├── notebooks/                         # exploratory work, never imported
+├── notebooks/
+│   └── kaggle_train.ipynb             # runnable: clone + train on a free Kaggle GPU
 ├── outputs/                           # checkpoints + logs (gitignored)
 ├── src/denoising/
 │   ├── conf/                          # Hydra configs (data, model, trainer, logger, predict, infer)
@@ -37,8 +38,7 @@ The pipeline:
 │   ├── predict.py                     # demo grid generator, Hydra @main
 │   └── infer.py                       # tiled full-image inference, Hydra @main
 ├── tests/test_smoke.py                # 1-step model + metric tests
-├── pyproject.toml                     # installable package + console scripts
-└── requirements.txt
+└── pyproject.toml                     # installable package + console scripts (single source of deps)
 ```
 
 Architecture is decoupled from training: backbone models are pure `nn.Module` classes importable from notebooks or tests; `DenoisingLitModule` is the Lightning wrapper that owns loss, optimizer, and metric logging, and selects the backbone by name from config.
@@ -71,6 +71,17 @@ wandb login
 ```
 
 Credentials are stored locally and never need to be entered again. Without this step, training still works — it defaults to CSV logging.
+
+### Running on Kaggle (free GPU)
+
+Training locally works but is slow on a laptop. [Kaggle Notebooks](https://www.kaggle.com/code) give free T4/P100 GPU time (30 GPU-hours/week, phone verification required) with no code changes — same `pip install -e .` package, same Hydra CLI overrides, just different paths.
+
+1. Upload `data/crops/clean/` as a private [Kaggle Dataset](https://www.kaggle.com/datasets).
+2. Open `notebooks/kaggle_train.ipynb` in this repo, and import it as a new Kaggle Notebook (File → Import Notebook).
+3. In the notebook's Settings: turn on a GPU accelerator and Internet access, then attach your dataset via **+ Add Input**.
+4. Run the cells. The notebook clones this repo fresh, installs it, auto-detects the mounted dataset's crop directory, and calls `denoising-train` with `data.clean_dir` / `hydra.run.dir` overridden to Kaggle paths.
+
+Because the notebook clones from GitHub rather than using local files, **push any config/code changes before running it** — it always trains whatever is currently on `main`, not your working tree.
 
 ## Usage
 

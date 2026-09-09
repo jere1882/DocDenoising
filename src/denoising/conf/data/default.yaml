@@ -8,14 +8,14 @@ test_fraction: 0.1
 # To override from CLI: data.degradations='[{type: jpeg, prob: 1.0, quality_min: 10, quality_max: 50}]'
 degradations:
   - type: gaussian_blur
-    prob: 0.3
-    radius_min: 0.1
-    radius_max: 1.0
+    prob: 0.5
+    radius_min: 0.5
+    radius_max: 2.5
   - type: jpeg
     prob: 1.0
-    quality_min: 10
-    quality_max: 50
+    quality_min: 5
+    quality_max: 25
   - type: gaussian_noise
-    prob: 0.5
-    sigma_min: 0.0
-    sigma_max: 0.02
+    prob: 0.7
+    sigma_min: 0.01
+    sigma_max: 0.06
