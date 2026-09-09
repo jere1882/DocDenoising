@@ -7,6 +7,15 @@ import numpy as np
 from PIL import Image, ImageFilter
 
 
+def jpeg_roundtrip(img: Image.Image, quality: int) -> Image.Image:
+    """Re-encode img as JPEG at the given quality and decode it back. Deterministic,
+    single-quality version of JPEGNoise's core op — used by predict.py for demo grids."""
+    buf = io.BytesIO()
+    img.save(buf, "JPEG", quality=quality)
+    buf.seek(0)
+    return Image.open(buf).convert("RGB")
+
+
 class JPEGNoise:
     def __init__(self, quality_min: int = 20, quality_max: int = 75, prob: float = 1.0):
         self.quality_min = quality_min
@@ -17,10 +26,7 @@ class JPEGNoise:
         if random.random() > self.prob:
             return img
         q = random.randint(self.quality_min, self.quality_max)
-        buf = io.BytesIO()
-        img.save(buf, "JPEG", quality=q)
-        buf.seek(0)
-        return Image.open(buf).convert("RGB")
+        return jpeg_roundtrip(img, q)
 
 
 class GaussianNoise:
