@@ -81,7 +81,7 @@ Training locally works but is slow on a laptop. [Kaggle Notebooks](https://www.k
 3. In the notebook's Settings: turn on a GPU accelerator and Internet access, then attach your dataset via **+ Add Input**.
 4. Run the cells. The notebook clones this repo fresh, installs it, auto-detects the mounted dataset's crop directory, and calls `denoising-train` with `data.clean_dir` / `hydra.run.dir` overridden to Kaggle paths.
 
-Because the notebook clones from GitHub rather than using local files, **push any config/code changes before running it** — it always trains whatever is currently on `main`, not your working tree.
+Because the notebook clones from GitHub rather than using local files, **push any config/code changes before running it** — it always trains whatever is currently on `master`, not your working tree.
 
 ## Usage
 
