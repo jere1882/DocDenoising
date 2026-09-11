@@ -11,3 +11,4 @@ seed: 42
 checkpoint_dir: ${hydra:run.dir}/checkpoints
 log_dir: ${hydra:run.dir}/logs
 ckpt_path: null  # set to a .ckpt path to resume training
+save_all_epochs: false  # also save one checkpoint per epoch (for denoising-viz-evolution)

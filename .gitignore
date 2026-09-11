@@ -12,9 +12,11 @@ __pycache__/
 # OS
 .DS_Store
 
+# Secrets
+.env
+
 # Data and outputs (do not commit)
-data/crops/
-data/source_pdfs/
+/data/
 outputs/
 *.ckpt
 *.pth

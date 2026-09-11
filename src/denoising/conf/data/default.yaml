@@ -3,6 +3,7 @@ img_size: 512
 batch_size: 8
 num_workers: 4
 test_fraction: 0.1
+max_train_samples: null   # cap the TRAIN set after the val split (val stays the same); null = use all
 
 # Degradation pipeline — steps applied in order, each with its own prob and parameter range.
 # To override from CLI: data.degradations='[{type: jpeg, prob: 1.0, quality_min: 10, quality_max: 50}]'

@@ -19,6 +19,7 @@ class DenoisingDataModule(pl.LightningDataModule):
         batch_size: int = 16,
         num_workers: int = 4,
         test_fraction: float = 0.1,
+        max_train_samples: int | None = None,
         seed: int = 42,
     ):
         super().__init__()
@@ -27,6 +28,13 @@ class DenoisingDataModule(pl.LightningDataModule):
     def setup(self, stage: str | None = None) -> None:
         names = [f for f in os.listdir(self.hparams.clean_dir) if f.endswith(".png")]
         train_names, test_names = split_names(names, self.hparams.seed, self.hparams.test_fraction)
+
+        # Optionally cap the training set *after* the split, so the validation set is
+        # unchanged. Two runs on the same folder+seed then share an identical val set,
+        # and a smaller cap is always a subset of a larger one — exactly what a clean
+        # "does more training data help?" comparison needs.
+        if self.hparams.max_train_samples is not None:
+            train_names = train_names[: self.hparams.max_train_samples]
 
         pipeline = DegradationPipeline.from_config(self.hparams.degradations)
 

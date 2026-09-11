@@ -22,6 +22,7 @@ def main(cfg: DictConfig) -> None:
         batch_size=cfg.data.batch_size,
         num_workers=cfg.data.num_workers,
         test_fraction=cfg.data.test_fraction,
+        max_train_samples=cfg.data.get("max_train_samples"),
         seed=cfg.seed,
     )
 
@@ -40,25 +41,34 @@ def main(cfg: DictConfig) -> None:
         f"-bs{cfg.data.batch_size}"
     )
     logger = instantiate(cfg.logger, name=run_name)
-    if hasattr(logger, "experiment"):
+    # Record the full config on the run — W&B only; CSVLogger's experiment has no `config`.
+    if hasattr(getattr(logger, "experiment", None), "config"):
         logger.experiment.config.update(OmegaConf.to_container(cfg, resolve=True))
 
-    trainer_kwargs = OmegaConf.to_container(cfg.trainer, resolve=True)
-    trainer = pl.Trainer(
-        **trainer_kwargs,
-        callbacks=[
+    callbacks = [
+        ModelCheckpoint(
+            dirpath=cfg.checkpoint_dir,
+            filename="denoising-{epoch:02d}-{val_psnr:.2f}",
+            monitor="val_psnr",
+            mode="max",
+            save_top_k=1,
+            save_last=True,
+        ),
+        LogPredictionsCallback(num_samples=4),
+    ]
+    # Keep one checkpoint per epoch (epoch=00.ckpt, epoch=01.ckpt, ...) so the prediction
+    # evolution can be regenerated after training with `denoising-viz-evolution`.
+    if cfg.get("save_all_epochs", False):
+        callbacks.append(
             ModelCheckpoint(
                 dirpath=cfg.checkpoint_dir,
-                filename="denoising-{epoch:02d}-{val_psnr:.2f}",
-                monitor="val_psnr",
-                mode="max",
-                save_top_k=1,
-                save_last=True,
-            ),
-            LogPredictionsCallback(num_samples=4),
-        ],
-        logger=logger,
-    )
+                filename="{epoch:02d}",  # Lightning renders this as "epoch=NN.ckpt"
+                save_top_k=-1,
+            )
+        )
+
+    trainer_kwargs = OmegaConf.to_container(cfg.trainer, resolve=True)
+    trainer = pl.Trainer(**trainer_kwargs, callbacks=callbacks, logger=logger)
 
     trainer.fit(model, datamodule=datamodule, ckpt_path=cfg.ckpt_path)
 

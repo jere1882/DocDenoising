@@ -31,6 +31,7 @@ denoising-train = "denoising.train:main"
 denoising-predict = "denoising.predict:main"
 denoising-infer = "denoising.infer:main"
 denoising-extract-crops = "denoising.data.extract_crops:main"
+denoising-viz-evolution = "denoising.viz_evolution:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
