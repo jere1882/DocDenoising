@@ -4,7 +4,7 @@ import hydra
 import pytorch_lightning as pl
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import ModelCheckpoint, TQDMProgressBar
 
 from denoising.callbacks import LogPredictionsCallback
 from denoising.data.datamodule import DenoisingDataModule
@@ -55,6 +55,14 @@ def main(cfg: DictConfig) -> None:
             save_last=True,
         ),
         LogPredictionsCallback(num_samples=4),
+        # Explicit TQDMProgressBar instead of Lightning's default (RichProgressBar,
+        # auto-selected whenever `rich` is installed). Rich's Live display redraws via
+        # a wall-clock-timed background thread, independent of refresh_rate — fine in a
+        # real terminal (in-place overwrite), but Kaggle's notebook kernel captures each
+        # of those redraws as a separate transcript entry, producing tens of thousands
+        # of near-duplicate lines over a long run. TQDM updates per-iteration on a
+        # time-throttled basis with no equivalent background redraw thread.
+        TQDMProgressBar(refresh_rate=20),
     ]
     # Keep one checkpoint per epoch (epoch=00.ckpt, epoch=01.ckpt, ...) so the prediction
     # evolution can be regenerated after training with `denoising-viz-evolution`.
