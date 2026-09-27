@@ -1,5 +1,6 @@
 """Degradation transforms and composable pipeline for noise synthesis."""
 
+import hashlib
 import io
 import random
 
@@ -104,8 +105,14 @@ def apply_deterministic(pipeline: DegradationPipeline, img: Image.Image, name: s
     Same file always gets the same noise this way — used for the validation set
     (comparable PSNR across epochs) and predict.py (demo grid matches what the
     model was actually validated against).
+
+    Uses a stable hash (md5), not Python's builtin ``hash()`` — builtin string
+    hashing is randomized per-process (PYTHONHASHSEED), so two separate
+    `denoising-train` process launches (e.g. run_10k and run_50k in
+    kaggle_compare.ipynb) would otherwise apply different noise to the same
+    filename, breaking the "same val set, same noise" comparison guarantee.
     """
-    seed = hash(name) & 0xFFFFFFFF
+    seed = int(hashlib.md5(name.encode()).hexdigest(), 16) & 0xFFFFFFFF
     py_state = random.getstate()
     np_state = np.random.get_state()
     random.seed(seed)
