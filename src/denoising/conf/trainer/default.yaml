@@ -3,3 +3,11 @@ accelerator: auto
 devices: 1
 log_every_n_steps: 25
 gradient_clip_val: 1.0
+# "value" (per-parameter clip_grad_value_), not the Lightning default "norm"
+# (clip_grad_norm_): norm-clipping computes ONE global L2 norm across every
+# parameter combined, so a single NaN/Inf gradient anywhere makes that norm
+# NaN, which then multiplies EVERY parameter's gradient by NaN in one step --
+# directly confirmed by checkpoint inspection (64/71 tensors NaN simultaneously
+# after a divergence). Value-clipping clips each parameter independently, so a
+# bad gradient stays localized instead of contaminating the whole model.
+gradient_clip_algorithm: value
