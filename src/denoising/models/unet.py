@@ -5,12 +5,19 @@ import torch.nn as nn
 
 
 class DoubleConv(nn.Module):
+    """Two 3x3 convs, each normalized before its own activation: Conv -> BN -> ReLU,
+    twice. BN sees each conv's raw pre-activation output directly, rather than a
+    (already-rectified, already-recombined) mix of both convs at the very end."""
+
     def __init__(self, in_c: int, out_c: int) -> None:
         super().__init__()
         self.block = nn.Sequential(
-            nn.Conv2d(in_c, out_c, 3, padding=1), nn.ReLU(inplace=True),
-            nn.Conv2d(out_c, out_c, 3, padding=1), nn.ReLU(inplace=True),
+            nn.Conv2d(in_c, out_c, 3, padding=1),
             nn.BatchNorm2d(out_c),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_c, out_c, 3, padding=1),
+            nn.BatchNorm2d(out_c),
+            nn.ReLU(inplace=True),
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

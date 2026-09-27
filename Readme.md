@@ -179,7 +179,7 @@ Four backbones are provided out of the box:
 | `residual_unet` | `ResidualUNet` | UNet that predicts the noise residual and subtracts it from the input |
 | `swin2sr` | `Swin2SRDenoiser` | Swin Transformer V2 fine-tuned from HuggingFace pretrained weights |
 
-`unet`, `plain_encoder_decoder`, and `residual_unet` use `DoubleConv` blocks (two 3×3 convolutions + BatchNorm + ReLU) and are trained from scratch. `swin2sr` loads pretrained backbone weights from `caidas/swin2SR-lightweight-x2-64` on HuggingFace and fine-tunes them for artifact removal. All models are fully convolutional and accept any input resolution — training uses 512×512.
+`unet`, `plain_encoder_decoder`, and `residual_unet` use `DoubleConv` blocks (two 3×3 convolutions, each `Conv → BatchNorm → ReLU`) and are trained from scratch. `swin2sr` loads pretrained backbone weights from `caidas/swin2SR-lightweight-x2-64` on HuggingFace and fine-tunes them for artifact removal. All models are fully convolutional and accept any input resolution — training uses 512×512.
 
 To add a new architecture: implement an `nn.Module` in `models/`, register it in `_BACKBONES` in `lit_module.py`, and add a YAML under `conf/model/`.
 
@@ -204,6 +204,6 @@ Smoke tests verify forward shape, backward pass, and the PSNR helper — fast (<
 
 ## Next steps
 
-- Replace BatchNorm with GroupNorm — early epochs are unstable while BN running stats warm up.
+- Replace BatchNorm with GroupNorm — BatchNorm's per-batch statistics still couple training stability to batch composition/size (e.g. multi-GPU requires `sync_batchnorm`); GroupNorm has no such dependence. (`DoubleConv`'s conv/norm/activation *ordering* was already fixed to the canonical `Conv → BN → ReLU`, per conv — this is about the normalization *type*, a separate, further step.)
 - Tune `base_channels` for available compute; larger models improve quality but slow training.
 - Add a Dockerfile for reproducible training environments and cloud deployment.
