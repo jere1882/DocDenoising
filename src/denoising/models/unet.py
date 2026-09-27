@@ -109,7 +109,6 @@ class ResidualUNet(nn.Module):
         self.dec2 = DoubleConv(c * 4, c * 2)
         self.up1 = nn.ConvTranspose2d(c * 2, c, 2, stride=2)
         self.dec1 = DoubleConv(c * 2, c)
-        # No sigmoid — noise estimate can be any real value
         self.noise_head = nn.Conv2d(c, out_channels, 1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -120,5 +119,9 @@ class ResidualUNet(nn.Module):
         d3 = self.dec3(torch.cat([self.up3(b), e3], dim=1))
         d2 = self.dec2(torch.cat([self.up2(d3), e2], dim=1))
         d1 = self.dec1(torch.cat([self.up1(d2), e1], dim=1))
-        noise = self.noise_head(d1)
+        # tanh, not unbounded: noisy/clean pixels are both in [0,1], so their
+        # difference (the true noise value) is provably bounded to [-1, 1] —
+        # matching that bound reduces how often (x - noise) lands outside [0,1]
+        # and hits clamp's zero-gradient region below.
+        noise = torch.tanh(self.noise_head(d1))
         return (x - noise).clamp(0, 1)
