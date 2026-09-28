@@ -49,8 +49,12 @@ class LogPredictionsCallback(pl.Callback):
             grid = torch.cat([noi, den, cln], dim=2)  # concat along width
             images.append(wandb.Image(grid, caption=f"noisy | denoised | clean — {name}"))
 
-        trainer.logger.experiment.log(
-            {"predictions": images, "epoch": trainer.current_epoch},
-            step=trainer.global_step,
-        )
+        # No explicit step= here: wandb's own docs warn that setting step under a
+        # multi-process (DDP) run risks silent data loss (its internal step-tracker
+        # can conflict with the step values Lightning's own metric logging advances
+        # via other channels). Confirmed directly: a real DDP run logged this exact
+        # warning, and its 4 predicted images never made it to the server (metadata
+        # reference existed, the actual file upload didn't) -- letting wandb
+        # auto-assign the step avoids that race.
+        trainer.logger.experiment.log({"predictions": images, "epoch": trainer.current_epoch})
         self._batch = None
