@@ -66,12 +66,16 @@ def main(cfg: DictConfig) -> None:
     ]
     # Keep one checkpoint per epoch (epoch=00.ckpt, epoch=01.ckpt, ...) so the prediction
     # evolution can be regenerated after training with `denoising-viz-evolution`.
+    # weights-only: these are never used to resume training (that's `last.ckpt` above),
+    # only for forward-pass inference in viz_evolution.py, so optimizer state (which
+    # roughly triples a checkpoint's size for Adam) would be pure disk-space waste.
     if cfg.get("save_all_epochs", False):
         callbacks.append(
             ModelCheckpoint(
                 dirpath=cfg.checkpoint_dir,
                 filename="{epoch:02d}",  # Lightning renders this as "epoch=NN.ckpt"
                 save_top_k=-1,
+                save_weights_only=True,
             )
         )
 
