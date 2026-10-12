@@ -1,17 +1,59 @@
 # Document Image Denoising
 
-This project supports training and evaluating deep neural network architectures to denoise and sharpen document images degraded by JPEG compression and other artifacts. The pipeline is end-to-end: PDF pages are rendered to high-resolution crops, and during training a configurable degradation pipeline synthesizes noise on the fly, teaching the model to recover clean text and structure.
+Removes JPEG compression artifacts, blur, and noise from scanned document images. PyTorch/Lightning training pipeline, six trained architecture/width variants benchmarked head-to-head, quantized to int8 ONNX, and evaluated on CPU latency — not just a single model that happens to work.
 
-The pipeline:
+**[Models (Hugging Face)](https://huggingface.co/jere1882/document-image-denoising)** · **[Training data (Kaggle, 50k crops)](https://www.kaggle.com/datasets/jeremiasrodriguez/document-crops-50k)**
 
-1. Render PDF pages to 512×512 crops at 288 DPI (PyMuPDF at `--scale 4.0`).
-2. Filter crops by content quality — rejects mostly-blank regions.
-3. During training, apply the degradation pipeline per crop: optional Gaussian blur → JPEG round-trip at random quality → optional Gaussian noise.
-4. Train the chosen backbone to map degraded → clean.
+![noisy, denoised, clean — the single crop with the largest measured gain (+18.2 dB)](demo_samples/real_pages/striking_crop_3way.png)
 
-## Demo
+Real PDF page, not a synthetic sample — see [below](#full-real-pages) for full-page results.
 
-![denoising demo](demo.png)
+## Results
+
+Six models, identical data/degradation/seed, trained 10 epochs on 2×T4 GPUs. PSNR is one global value from the summed squared error over the full held-out validation split (not an average of per-image PSNRs — those disagree by several dB and aren't the same quantity; see [`decisions_sept_27.md`](decisions_sept_27.md) for the training-divergence investigation that made this kind of check necessary).
+
+| Model | Params | PSNR fp32 | PSNR int8 | Size fp32→int8 | CPU latency fp32→int8* |
+|---|---|---|---|---|---|
+| `unet` (bc64) | 7.70M | 30.33 dB | 30.24 dB | 30.8MB → 7.8MB | 288 → 243 ms |
+| `residual_unet` (bc64) | 7.70M | 30.25 dB | 30.18 dB | 30.8MB → 7.8MB | 286 → 239 ms |
+| `residual_unet` (bc32) | 1.93M | 30.03 dB | 30.00 dB | 7.7MB → 2.0MB | 90 → 76 ms |
+| `residual_unet` (bc16) | 0.48M | 29.22 dB | 29.22 dB | 1.9MB → 0.5MB | 44 → 34 ms |
+| `residual_unet` (bc8) | 0.12M | 27.36 dB | 27.23 dB | 0.5MB → 0.16MB | 18 → 18 ms |
+| `plain_encoder_decoder` (bc64) | 6.93M | 28.28 dB | 28.20 dB | 27.7MB → 7.0MB | 239 → 194 ms |
+
+\* Single 512×512 tile, batch 1, 4 CPU threads, one machine (Apple Silicon) — not a general hardware claim. int8 is static-quantized (QDQ, per-channel weights), calibrated on training crops never seen by the validation set.
+
+**Findings:**
+- Residual learning (predict the noise, subtract it) converges faster in early epochs but reaches the *same* final PSNR as predicting the clean image directly — no final-quality edge, despite that being the usual assumption.
+- Skip connections matter far more than width: removing them (`plain_encoder_decoder`) costs ~2 dB; cutting `residual_unet` to 32 channels (25% of params) costs 0.2 dB.
+- int8 quantization costs ≤0.14 dB everywhere, with a consistent ~4× size reduction.
+- A `swin2sr` (pretrained Swin Transformer V2) attempt is in the code but not in the table above — it ran out of GPU memory on 512×512 crops and was abandoned once the width ablation showed this task doesn't need that much capacity.
+
+## Tech stack
+
+| | |
+|---|---|
+| Training | PyTorch, PyTorch Lightning, DDP (multi-GPU) |
+| Config | Hydra (every hyperparameter CLI-overridable) |
+| Experiment tracking | Weights & Biases |
+| Compute / data hosting | Kaggle (free T4×2 GPUs, dataset hosting) |
+| Export & quantization | ONNX, ONNX Runtime (static int8, QDQ) |
+| Data pipeline | PyMuPDF (PDF rendering), OpenCV |
+| Model hosting | Hugging Face Hub |
+
+## Full real pages
+
+The table above is on 512×512 crops; the model also runs tiled inference on full-size
+pages (overlapping 512×512 tiles blended with a 2D Hann window — see
+[`docs/tiled_inference.md`](docs/tiled_inference.md) for both the PyTorch and ONNX
+backends, and a measured, counterintuitive answer to whether batching tiles together
+helps on CPU — it doesn't). The hero image above and the two below are real PDF pages
+from the training corpus's own held-out split, picked because they had the largest
+measured denoising gain among 800 scanned held-out crops:
+
+![full-resolution region, page 46 of a real budget document](demo_samples/real_pages/page46_fullres_crop.png)
+
+![full-resolution region, page 63 of a real fire-code document](demo_samples/real_pages/page63_fullres_crop.png)
 
 ## Project layout
 
@@ -20,25 +62,21 @@ The pipeline:
 ├── data/crops/clean/                  # generated dataset (gitignored)
 ├── notebooks/
 │   └── kaggle_train.ipynb             # runnable: clone + train on a free Kaggle GPU
-├── outputs/                           # checkpoints + logs (gitignored)
+├── outputs/                           # checkpoints, logs, exports (gitignored)
+├── scripts/
+│   ├── build_tiling_demo.py           # synthetic-mosaic tiling demo + batching benchmark
+│   └── build_page_candidates.py       # colorfulness-ranked demo-page candidates
 ├── src/denoising/
-│   ├── conf/                          # Hydra configs (data, model, trainer, logger, predict, infer)
+│   ├── conf/                          # Hydra configs (data, model, trainer, logger, predict, infer, export)
 │   ├── callbacks.py                   # W&B prediction image logging callback
-│   ├── data/
-│   │   ├── dataset.py                 # DocumentDenoisingDataset
-│   │   ├── datamodule.py              # LightningDataModule (split + dataloaders)
-│   │   ├── transforms.py              # Degradation pipeline (JPEGNoise, GaussianNoise, GaussianBlur)
-│   │   └── extract_crops.py           # PDF → clean crops, CLI
-│   ├── models/
-│   │   ├── unet.py                    # UNet, PlainEncoderDecoder, ResidualUNet (nn.Module backbones)
-│   │   ├── swin2sr.py                 # Swin2SR wrapper (HuggingFace pretrained fine-tune)
-│   │   └── lit_module.py              # LightningModule (loss, optimizer, metrics)
+│   ├── data/                          # dataset, datamodule, degradation pipeline, PDF→crop extraction
+│   ├── models/                        # UNet, PlainEncoderDecoder, ResidualUNet, Swin2SR wrapper, Lightning module
+│   ├── export/                        # checkpoint → ONNX fp32 → int8, PSNR/size/latency report
 │   ├── utils/                         # device + metrics
-│   ├── train.py                       # entry point, Hydra @main
-│   ├── predict.py                     # demo grid generator, Hydra @main
-│   └── infer.py                       # tiled full-image inference, Hydra @main
-├── tests/test_smoke.py                # 1-step model + metric tests
-└── pyproject.toml                     # installable package + console scripts (single source of deps)
+│   ├── train.py / predict.py / infer.py   # Hydra @main entry points
+├── docs/tiled_inference.md            # full-page inference: PyTorch/ONNX backends, a real bug found and fixed, batching
+├── decisions_sept_27.md               # training-divergence investigation: root causes, what was ruled out
+└── tests/test_smoke.py                # shape/backward/metric smoke tests
 ```
 
 Architecture is decoupled from training: backbone models are pure `nn.Module` classes importable from notebooks or tests; `DenoisingLitModule` is the Lightning wrapper that owns loss, optimizer, and metric logging, and selects the backbone by name from config.
@@ -46,113 +84,51 @@ Architecture is decoupled from training: backbone models are pure `nn.Module` cl
 ## Setup
 
 ```bash
-conda create -n denoise python=3.13
-conda activate denoise
+python3.13 -m venv .venv && source .venv/bin/activate
 pip install -e .
 ```
 
-(Or use a venv: `python3.13 -m venv .venv && source .venv/bin/activate && pip install -e .`.)
+`accelerator: auto` picks the best available device (CUDA, Apple Silicon MPS, or CPU) with no config changes.
 
-### Hardware
-
-Training uses `accelerator: auto` — Lightning automatically selects the best available device:
-- **Apple Silicon Mac** → MPS
-- **Linux/Windows with NVIDIA GPU** → CUDA
-- **CPU fallback** — works but slow
-
-No code or config changes are needed when switching machines.
-
-### Optional: Weights & Biases experiment tracking
-
-Create a free account at [wandb.ai](https://wandb.ai), then log in once:
+### Optional: Weights & Biases
 
 ```bash
-wandb login
+wandb login   # one-time; without this, training defaults to CSV logging
 ```
-
-Credentials are stored locally and never need to be entered again. Without this step, training still works — it defaults to CSV logging.
 
 ### Running on Kaggle (free GPU)
 
-Training locally works but is slow on a laptop. [Kaggle Notebooks](https://www.kaggle.com/code) give free T4/P100 GPU time (30 GPU-hours/week, phone verification required) with no code changes — same `pip install -e .` package, same Hydra CLI overrides, just different paths.
-
-1. Upload `data/crops/clean/` as a private [Kaggle Dataset](https://www.kaggle.com/datasets).
-2. Open `notebooks/kaggle_train.ipynb` in this repo, and import it as a new Kaggle Notebook (File → Import Notebook).
-3. In the notebook's Settings: turn on a GPU accelerator and Internet access, then attach your dataset via **+ Add Input**.
-4. Run the cells. The notebook clones this repo fresh, installs it, auto-detects the mounted dataset's crop directory, and calls `denoising-train` with `data.clean_dir` / `hydra.run.dir` overridden to Kaggle paths.
-
-Because the notebook clones from GitHub rather than using local files, **push any config/code changes before running it** — it always trains whatever is currently on `master`, not your working tree.
+1. Upload your crops dir as a private [Kaggle Dataset](https://www.kaggle.com/datasets), or use the [public 50k-crop dataset](https://www.kaggle.com/datasets/jeremiasrodriguez/document-crops-50k) above.
+2. Import [`notebooks/kaggle_train.ipynb`](notebooks/kaggle_train.ipynb) as a new Kaggle Notebook (File → Import Notebook).
+3. Settings: GPU accelerator + Internet on, attach the dataset via **+ Add Input**.
+4. Run. The notebook clones this repo fresh and trains with `data.clean_dir`/`hydra.run.dir` set to the Kaggle paths — push any code/config changes first, it always trains `master`, not your working tree.
 
 ## Usage
 
-All commands are available as console scripts after `pip install -e .`. Configs live in `src/denoising/conf/` and any value is overridable on the CLI via Hydra dotted syntax (`data.batch_size=4`, `++trainer.fast_dev_run=true`, etc.).
-
-### Step 1 — Provide source PDFs
-
-Drop a folder of PDFs anywhere. Any PDFs work: reports, manuals, articles, scanned forms. The more variety, the better the model generalizes.
-
-### Step 2 — Generate the training crops
+Hydra dotted overrides work on every command (`data.batch_size=4`, `model=residual_unet`, `++trainer.fast_dev_run=true`, etc.).
 
 ```bash
-denoising-extract-crops \
-    --pdf-dir ~/Downloads/pdfs \
-    --output-dir data/crops \
-    --crop-size 512 \
-    --scale 4.0 \
-    --target-crops 10000 \
-    --max-pages-per-pdf 10 \
-    --crops-per-page 6
-```
+# 1. PDFs -> 512x512 crops
+denoising-extract-crops --pdf-dir ~/Downloads/pdfs --output-dir data/crops --scale 4.0 --target-crops 10000
 
-Pages are rendered at `--scale 4.0` (288 DPI) for sharp text, then 512×512 crops are cut at random positions. Stops at `--target-crops`. Use `--min-std` / `--max-mean` to tune the blank-region filter.
+# 2. Train (swap model=unet | residual_unet | plain_encoder_decoder | swin2sr)
+denoising-train model=residual_unet trainer.max_epochs=10 hydra.run.dir=outputs/my_run
 
-### Step 3 — Train
+# 3. Demo grid from held-out validation crops
+denoising-predict predict.checkpoint=outputs/my_run/checkpoints/last.ckpt
 
-```bash
-denoising-train trainer.max_epochs=20 hydra.run.dir=outputs/my_run
-```
-
-Each run writes to its own directory under `hydra.run.dir` — checkpoints go to `<run_dir>/checkpoints/` and logs to `<run_dir>/logs/`. Running two experiments in parallel requires separate `hydra.run.dir` values so outputs don't collide.
-
-**Useful overrides:**
-- `model=unet` / `model=residual_unet` / `model=plain_encoder_decoder` / `model=swin2sr` — swap backbone.
-- `model.backbone_cfg.base_channels=32` — smaller model for limited hardware.
-- `data.batch_size=4` — reduce if running out of GPU memory.
-- `trainer.max_epochs=20` — number of epochs.
-- `ckpt_path=outputs/my_run/checkpoints/last.ckpt` — resume from a checkpoint.
-- `++trainer.fast_dev_run=true` — 1 train + 1 val step, sanity check the pipeline.
-
-**With Weights & Biases tracking** (requires `wandb login` first):
-
-```bash
-denoising-train logger=wandb trainer.max_epochs=20 hydra.run.dir=outputs/my_run
-```
-
-Each W&B run logs:
-- `train_loss`, `val_loss`, `val_psnr` curves
-- Full hyperparameter config (backbone, lr, batch size, degradation pipeline, etc.)
-- Sample noisy / denoised / clean image triplets at the end of each validation epoch, with source filenames in captions
-- System metrics (CPU, RAM, GPU memory) automatically
-
-### Step 4 — Generate demo samples
-
-```bash
-denoising-predict predict.checkpoint=outputs/my_run/checkpoints/last.ckpt predict.num_samples=4
-```
-
-Samples candidates from the held-out validation split (never crops the model trained on), degrades them with the real `data.degradations` pipeline — the same noisy input the checkpoint was actually validated against — picks the top-N by PSNR gain, and stacks them into `demo.png`.
-
-### Step 5 — Denoise a full document image
-
-```bash
+# 4. Full-page inference (PyTorch or, with infer.onnx_path=, the quantized ONNX model)
 denoising-infer infer.checkpoint=outputs/my_run/checkpoints/last.ckpt infer.input=page.png
+
+# 5. Export + quantize to ONNX, with a PSNR/size/latency report
+denoising-export --checkpoint outputs/my_run/checkpoints/last.ckpt --clean-dir data/crops/clean --out-dir outputs/my_run/export
 ```
 
-Accepts an image of any size. The image is split into overlapping tiles, each denoised independently, and blended back together using a 2D Hann window to eliminate seam artifacts. Output is saved next to the input as `<name>_denoised.<ext>` unless `infer.output` is specified.
+Checkpoints resume with `ckpt_path=...`; W&B logging with `logger=wandb` (after `wandb login`).
 
 ## Degradation pipeline
 
-Noise is synthesized per crop during training by applying steps in order. Each step has a `prob` and random parameter ranges. The default pipeline (`conf/data/default.yaml`):
+Applied per crop during training, in order — Gaussian blur → JPEG round-trip → Gaussian noise, each with its own probability and parameter range (`conf/data/default.yaml`):
 
 | Step | Default prob | Parameters |
 |---|---|---|
@@ -160,50 +136,26 @@ Noise is synthesized per crop during training by applying steps in order. Each s
 | `jpeg` | 1.0 | quality ∈ [10, 50] |
 | `gaussian_noise` | 0.5 | sigma ∈ [0.0, 0.02] |
 
-To override from the CLI:
-
-```bash
-denoising-train 'data.degradations=[{type: jpeg, prob: 1.0, quality_min: 5, quality_max: 30}]'
-```
-
-To add a new degradation: implement a callable class in `transforms.py`, register it in `DegradationPipeline._REGISTRY`, and add an entry to the YAML.
+Override on the CLI: `denoising-train 'data.degradations=[{type: jpeg, prob: 1.0, quality_min: 5, quality_max: 30}]'`. To add a new degradation: implement a callable in `transforms.py`, register it in `DegradationPipeline._REGISTRY`.
 
 ## Architecture
 
-Four backbones are provided out of the box:
-
 | Config key | Class | Description |
 |---|---|---|
-| `unet` | `UNet` | Three encoder/decoder levels with skip connections (64→128→256→512 bridge) |
-| `plain_encoder_decoder` | `PlainEncoderDecoder` | Same depth, no skip connections — ablation baseline for UNet |
-| `residual_unet` | `ResidualUNet` | UNet that predicts the noise residual and subtracts it from the input |
-| `swin2sr` | `Swin2SRDenoiser` | Swin Transformer V2 fine-tuned from HuggingFace pretrained weights |
+| `unet` | `UNet` | 3 encoder/decoder levels with skip connections (64→128→256→512) |
+| `plain_encoder_decoder` | `PlainEncoderDecoder` | Same depth, no skip connections — ablation baseline |
+| `residual_unet` | `ResidualUNet` | Predicts the noise residual (tanh-bounded) and subtracts it |
+| `swin2sr` | `Swin2SRDenoiser` | Pretrained Swin Transformer V2 fine-tune — see Findings above |
 
-`unet`, `plain_encoder_decoder`, and `residual_unet` use `DoubleConv` blocks (two 3×3 convolutions, each `Conv → BatchNorm → ReLU`) and are trained from scratch. `swin2sr` loads pretrained backbone weights from `caidas/swin2SR-lightweight-x2-64` on HuggingFace and fine-tunes them for artifact removal. All models are fully convolutional and accept any input resolution — training uses 512×512.
-
-To add a new architecture: implement an `nn.Module` in `models/`, register it in `_BACKBONES` in `lit_module.py`, and add a YAML under `conf/model/`.
-
-## Evaluation metric
-
-**PSNR (Peak Signal-to-Noise Ratio)** is the standard metric for image restoration benchmarks (denoising, super-resolution, compression). It is defined as:
-
-```
-PSNR = 10 · log₁₀(MAX² / MSE)
-```
-
-where MAX = 1.0 for normalized images. PSNR is monotonically related to pixel-wise MSE — they carry identical information — but expressed in decibels, which makes differences more interpretable (every +3 dB ≈ halving the mean squared error) and comparable to published work.
+All are fully convolutional (any input resolution; trained at 512×512). `base_channels` controls width for any of the from-scratch backbones. To add an architecture: implement an `nn.Module` in `models/`, register it in `_BACKBONES` in `lit_module.py`, add a config under `conf/model/`.
 
 ## Tests
 
 ```bash
-pip install -e ".[dev]"
-pytest tests/
+pip install -e ".[dev]" && pytest tests/
 ```
 
-Smoke tests verify forward shape, backward pass, and the PSNR helper — fast (<1s) and catch dimension mismatches before a real training run.
+## Further reading
 
-## Next steps
-
-- Replace BatchNorm with GroupNorm — BatchNorm's per-batch statistics still couple training stability to batch composition/size (e.g. multi-GPU requires `sync_batchnorm`); GroupNorm has no such dependence. (`DoubleConv`'s conv/norm/activation *ordering* was already fixed to the canonical `Conv → BN → ReLU`, per conv — this is about the normalization *type*, a separate, further step.)
-- Tune `base_channels` for available compute; larger models improve quality but slow training.
-- Add a Dockerfile for reproducible training environments and cloud deployment.
+- [`docs/tiled_inference.md`](docs/tiled_inference.md) — full-page inference, PyTorch/ONNX backends, a real edge-case bug found via an identity-predictor test, and CPU batching results
+- [`decisions_sept_27.md`](decisions_sept_27.md) — the training-divergence investigation: gradient clipping, mixed precision, DDP BatchNorm sync, and what was ruled out along the way

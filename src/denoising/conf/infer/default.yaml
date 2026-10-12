@@ -1,5 +1,8 @@
 checkpoint: outputs/checkpoints/last.ckpt
+onnx_path: null  # if set, uses this ONNX file (fp32 or int8) on CPU instead of the PyTorch checkpoint
 input: ???       # required: path to the input image
 output: null     # if null, saves alongside the input as <name>_denoised.<ext>
-tile_size: 256   # must match the model's trained resolution
+tile_size: 512   # must match the model's trained resolution (all models here: 512)
 overlap: 32      # pixel overlap between adjacent tiles; more = smoother seams, slower
+batch_size: 1    # tiles per predict() call; measured slower at 8 on CPU for both backends
+                 # on this machine -- see docs/tiled_inference.md before raising this
