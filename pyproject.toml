@@ -19,7 +19,6 @@ dependencies = [
     "pillow",
     "matplotlib",
     "tqdm",
-    "transformers",
     "wandb",
 ]
 

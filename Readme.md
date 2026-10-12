@@ -1,6 +1,6 @@
 # Document Image Denoising
 
-Removes JPEG compression artifacts, blur, and noise from scanned document images. PyTorch/Lightning training pipeline, six trained architecture/width variants benchmarked head-to-head, quantized to int8 ONNX, and evaluated on CPU latency — not just a single model that happens to work.
+Removes JPEG compression artifacts, blur, and noise from scanned document images. PyTorch/Lightning training pipeline, six trained architecture/width variants benchmarked head-to-head, quantized to int8 ONNX, and evaluated on CPU latency.
 
 **[Models (Hugging Face)](https://huggingface.co/jere1882/document-image-denoising)** · **[Training data (Kaggle, 50k crops)](https://www.kaggle.com/datasets/jeremiasrodriguez/document-crops-50k)**
 
@@ -10,7 +10,7 @@ Real PDF page, not a synthetic sample — see [below](#full-real-pages) for full
 
 ## Results
 
-Six models, identical data/degradation/seed, trained 10 epochs on 2×T4 GPUs. PSNR is one global value from the summed squared error over the full held-out validation split (not an average of per-image PSNRs — those disagree by several dB and aren't the same quantity; see [`decisions_sept_27.md`](decisions_sept_27.md) for the training-divergence investigation that made this kind of check necessary).
+Six models, identical data/degradation/seed, trained 10 epochs on 2×T4 GPUs. PSNR is one global value from the summed squared error over the full held-out validation split (not an average of per-image PSNRs — those disagree by several dB and aren't the same quantity).
 
 | Model | Params | PSNR fp32 | PSNR int8 | Size fp32→int8 | CPU latency fp32→int8* |
 |---|---|---|---|---|---|
@@ -27,7 +27,6 @@ Six models, identical data/degradation/seed, trained 10 epochs on 2×T4 GPUs. PS
 - Residual learning (predict the noise, subtract it) converges faster in early epochs but reaches the *same* final PSNR as predicting the clean image directly — no final-quality edge, despite that being the usual assumption.
 - Skip connections matter far more than width: removing them (`plain_encoder_decoder`) costs ~2 dB; cutting `residual_unet` to 32 channels (25% of params) costs 0.2 dB.
 - int8 quantization costs ≤0.14 dB everywhere, with a consistent ~4× size reduction.
-- A `swin2sr` (pretrained Swin Transformer V2) attempt is in the code but not in the table above — it ran out of GPU memory on 512×512 crops and was abandoned once the width ablation showed this task doesn't need that much capacity.
 
 ## Tech stack
 
@@ -36,8 +35,9 @@ Six models, identical data/degradation/seed, trained 10 epochs on 2×T4 GPUs. PS
 | Training | PyTorch, PyTorch Lightning, DDP (multi-GPU) |
 | Config | Hydra (every hyperparameter CLI-overridable) |
 | Experiment tracking | Weights & Biases |
-| Compute / data hosting | Kaggle (free T4×2 GPUs, dataset hosting) |
+| Compute / data hosting | Kaggle (T4×2 GPUs, dataset hosting) |
 | Export & quantization | ONNX, ONNX Runtime (static int8, QDQ) |
+| Benchmarking | `torch.utils.benchmark`, `onnxruntime_perf_test`, `perf_counter` (cross-checked against each other) |
 | Data pipeline | PyMuPDF (PDF rendering), OpenCV |
 | Model hosting | Hugging Face Hub |
 
@@ -70,12 +70,11 @@ measured denoising gain among 800 scanned held-out crops:
 │   ├── conf/                          # Hydra configs (data, model, trainer, logger, predict, infer, export)
 │   ├── callbacks.py                   # W&B prediction image logging callback
 │   ├── data/                          # dataset, datamodule, degradation pipeline, PDF→crop extraction
-│   ├── models/                        # UNet, PlainEncoderDecoder, ResidualUNet, Swin2SR wrapper, Lightning module
+│   ├── models/                        # UNet, PlainEncoderDecoder, ResidualUNet, Lightning module
 │   ├── export/                        # checkpoint → ONNX fp32 → int8, PSNR/size/latency report
 │   ├── utils/                         # device + metrics
 │   ├── train.py / predict.py / infer.py   # Hydra @main entry points
 ├── docs/tiled_inference.md            # full-page inference: PyTorch/ONNX backends, a real bug found and fixed, batching
-├── decisions_sept_27.md               # training-divergence investigation: root causes, what was ruled out
 └── tests/test_smoke.py                # shape/backward/metric smoke tests
 ```
 
@@ -111,7 +110,7 @@ Hydra dotted overrides work on every command (`data.batch_size=4`, `model=residu
 # 1. PDFs -> 512x512 crops
 denoising-extract-crops --pdf-dir ~/Downloads/pdfs --output-dir data/crops --scale 4.0 --target-crops 10000
 
-# 2. Train (swap model=unet | residual_unet | plain_encoder_decoder | swin2sr)
+# 2. Train (swap model=unet | residual_unet | plain_encoder_decoder)
 denoising-train model=residual_unet trainer.max_epochs=10 hydra.run.dir=outputs/my_run
 
 # 3. Demo grid from held-out validation crops
@@ -145,7 +144,6 @@ Override on the CLI: `denoising-train 'data.degradations=[{type: jpeg, prob: 1.0
 | `unet` | `UNet` | 3 encoder/decoder levels with skip connections (64→128→256→512) |
 | `plain_encoder_decoder` | `PlainEncoderDecoder` | Same depth, no skip connections — ablation baseline |
 | `residual_unet` | `ResidualUNet` | Predicts the noise residual (tanh-bounded) and subtracts it |
-| `swin2sr` | `Swin2SRDenoiser` | Pretrained Swin Transformer V2 fine-tune — see Findings above |
 
 All are fully convolutional (any input resolution; trained at 512×512). `base_channels` controls width for any of the from-scratch backbones. To add an architecture: implement an `nn.Module` in `models/`, register it in `_BACKBONES` in `lit_module.py`, add a config under `conf/model/`.
 
@@ -158,4 +156,3 @@ pip install -e ".[dev]" && pytest tests/
 ## Further reading
 
 - [`docs/tiled_inference.md`](docs/tiled_inference.md) — full-page inference, PyTorch/ONNX backends, a real edge-case bug found via an identity-predictor test, and CPU batching results
-- [`decisions_sept_27.md`](decisions_sept_27.md) — the training-divergence investigation: gradient clipping, mixed precision, DDP BatchNorm sync, and what was ruled out along the way

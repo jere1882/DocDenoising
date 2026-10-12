@@ -47,5 +47,5 @@ the repo makes it super easy to experiment with new models. just define
 a new model in src/denoising/models.
 
 you can either entirely code your new model in pytorch (e.g. unet)
-or you can import your model (swin2sr from hugging face).
+or you can import a pretrained model from hugging face.
 

@@ -4,7 +4,6 @@ import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 
-from denoising.models.swin2sr import Swin2SRDenoiser
 from denoising.models.unet import PlainEncoderDecoder, ResidualUNet, UNet
 from denoising.utils.metrics import psnr_from_mse
 
@@ -12,7 +11,6 @@ _BACKBONES: dict[str, type[nn.Module]] = {
     "unet": UNet,
     "plain_encoder_decoder": PlainEncoderDecoder,
     "residual_unet": ResidualUNet,
-    "swin2sr": Swin2SRDenoiser,
 }
 
 _LOSSES: dict[str, type[nn.Module]] = {
