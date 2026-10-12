@@ -4,7 +4,7 @@ import torch
 import torch.nn.functional as F
 
 from denoising.models.lit_module import DenoisingLitModule
-from denoising.models.unet import ResidualUNet, UNet
+from denoising.models.unet import PlainEncoderDecoder, ResidualUNet, UNet
 from denoising.utils.metrics import psnr_from_mse
 
 _BACKBONE_CFG = {"in_channels": 3, "out_channels": 3, "base_channels": 8}
@@ -12,6 +12,14 @@ _BACKBONE_CFG = {"in_channels": 3, "out_channels": 3, "base_channels": 8}
 
 def test_unet_forward_shape():
     model = UNet(base_channels=8)
+    x = torch.randn(2, 3, 64, 64)
+    y = model(x)
+    assert y.shape == x.shape
+    assert 0.0 <= y.min().item() and y.max().item() <= 1.0
+
+
+def test_plain_encoder_decoder_forward_shape():
+    model = PlainEncoderDecoder(base_channels=8)
     x = torch.randn(2, 3, 64, 64)
     y = model(x)
     assert y.shape == x.shape

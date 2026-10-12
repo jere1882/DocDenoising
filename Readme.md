@@ -67,7 +67,7 @@ measured denoising gain among 800 scanned held-out crops:
 │   ├── build_tiling_demo.py           # synthetic-mosaic tiling demo + batching benchmark
 │   └── build_page_candidates.py       # colorfulness-ranked demo-page candidates
 ├── src/denoising/
-│   ├── conf/                          # Hydra configs (data, model, trainer, logger, predict, infer, export)
+│   ├── conf/                          # Hydra configs (data, model, trainer, logger, predict, infer)
 │   ├── callbacks.py                   # W&B prediction image logging callback
 │   ├── data/                          # dataset, datamodule, degradation pipeline, PDF→crop extraction
 │   ├── models/                        # UNet, PlainEncoderDecoder, ResidualUNet, Lightning module
@@ -131,9 +131,9 @@ Applied per crop during training, in order — Gaussian blur → JPEG round-trip
 
 | Step | Default prob | Parameters |
 |---|---|---|
-| `gaussian_blur` | 0.3 | radius ∈ [0.1, 1.0] |
-| `jpeg` | 1.0 | quality ∈ [10, 50] |
-| `gaussian_noise` | 0.5 | sigma ∈ [0.0, 0.02] |
+| `gaussian_blur` | 0.5 | radius ∈ [0.5, 2.5] |
+| `jpeg` | 1.0 | quality ∈ [5, 25] |
+| `gaussian_noise` | 0.7 | sigma ∈ [0.01, 0.06] |
 
 Override on the CLI: `denoising-train 'data.degradations=[{type: jpeg, prob: 1.0, quality_min: 5, quality_max: 30}]'`. To add a new degradation: implement a callable in `transforms.py`, register it in `DegradationPipeline._REGISTRY`.
 

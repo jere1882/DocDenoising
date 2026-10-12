@@ -89,7 +89,7 @@ def export_run(checkpoint, clean_dir, out_dir, n_calib, n_eval, seed, test_fract
     }
 
     first_noisy, _ = _load_pair(clean_dir, eval_names[0], pipeline, img_size)
-    parity = float(np.abs(run_pt(first_noisy.unsqueeze(0)) - run_ort(sess_fp32)(first_noisy.unsqueeze(0))).max())
+    parity = max_abs_diff(backbone, fp32_path, first_noisy.unsqueeze(0))
 
     sq_sum = {k: 0.0 for k in paths}
     n_px = 0
